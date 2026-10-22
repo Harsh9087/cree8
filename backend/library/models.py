@@ -45,6 +45,16 @@ class Allocation(models.Model):
     is_upgraded = models.BooleanField(default=False)
     upgrade_fee = models.PositiveIntegerField(default=0)
     upgraded_at = models.DateTimeField(null=True, blank=True)
+    VERIFICATION_CHOICES = [
+        ("pending", "Pending Verification"),
+        ("confirmed_left", "Confirmed Left"),
+        ("renewed", "Renewed / Extended"),
+        ("retained", "Still Continuing"),
+    ]
+    verification_status = models.CharField(max_length=20, choices=VERIFICATION_CHOICES, default="pending")
+    verification_notes = models.TextField(blank=True, default="")
+    verified_at = models.DateTimeField(null=True, blank=True)
+    auto_freed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -82,3 +92,18 @@ class Transaction(models.Model):
 def seed_seats():
     for number in range(1, 65):
         Seat.objects.get_or_create(number=number)
+
+def auto_free_expired_allocations():
+    """
+    Checks all active allocations. If end_date < today, automatically
+    marks is_active=False so the seat is freed immediately, and flags auto_freed=True.
+    """
+    today = timezone.localdate()
+    expired_active = Allocation.objects.filter(is_active=True, end_date__lt=today)
+    count = 0
+    for alloc in expired_active:
+        alloc.is_active = False
+        alloc.auto_freed = True
+        alloc.save(update_fields=["is_active", "auto_freed"])
+        count += 1
+    return count

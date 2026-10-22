@@ -10,7 +10,7 @@ from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from .models import Student, Seat, Allocation, Transaction, seed_seats
+from .models import Student, Seat, Allocation, Transaction, seed_seats, auto_free_expired_allocations
 from .serializers import StudentSerializer, SeatSerializer, AllocationSerializer, TransactionSerializer
 
 def add_months(start, months):
@@ -92,6 +92,7 @@ class StudentDetail(generics.RetrieveUpdateDestroyAPIView):
 @permission_classes([IsAuthenticated])
 def seats_view(request):
     seed_seats()
+    auto_free_expired_allocations()
     seats = Seat.objects.all().prefetch_related("allocations__student")
     return Response(SeatSerializer(seats, many=True).data)
 
@@ -265,9 +266,12 @@ def upgrade_seat(request, seat_number):
     })
 
 class AllocationList(generics.ListAPIView):
-    queryset = Allocation.objects.select_related("student", "seat").all()
     serializer_class = AllocationSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        auto_free_expired_allocations()
+        return Allocation.objects.select_related("student", "seat").all().order_by("-created_at")
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
@@ -323,6 +327,7 @@ class TransactionList(generics.ListAPIView):
 @permission_classes([IsAuthenticated])
 def dashboard_view(request):
     seed_seats()
+    auto_free_expired_allocations()
     seats = Seat.objects.count()
     active_allocations = Allocation.objects.filter(is_active=True)
     occupied = active_allocations.count()
@@ -330,6 +335,12 @@ def dashboard_view(request):
     occupied_normal = active_allocations.filter(chair_type="normal").count()
     pending = sum(a.amount_pending for a in active_allocations)
     paid = sum(a.amount_paid for a in active_allocations)
+
+    today = timezone.localdate()
+    ended_count = Allocation.objects.filter(end_date__lt=today).count()
+    pending_verification_count = Allocation.objects.filter(end_date__lt=today, verification_status="pending").count()
+    expiring_soon_count = Allocation.objects.filter(is_active=True, end_date__gte=today, end_date__lte=today + timedelta(days=7)).count()
+
     return Response({
         "total_seats": seats,
         "occupied_seats": occupied,
@@ -341,4 +352,170 @@ def dashboard_view(request):
         "active_students": active_allocations.values("student_id").distinct().count(),
         "amount_collected": paid,
         "amount_pending": pending,
+        "ended_subscriptions": ended_count,
+        "pending_verification_count": pending_verification_count,
+        "expiring_soon_subscriptions": expiring_soon_count,
     })
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def subscriptions_view(request):
+    seed_seats()
+    freed_in_check = auto_free_expired_allocations()
+    today = timezone.localdate()
+    seven_days_ahead = today + timedelta(days=7)
+
+    allocations = Allocation.objects.select_related("student", "seat").all().order_by("-end_date", "-created_at")
+
+    ended_count = Allocation.objects.filter(end_date__lt=today).count()
+    ending_today_count = Allocation.objects.filter(end_date=today).count()
+    expiring_soon_count = Allocation.objects.filter(is_active=True, end_date__gt=today, end_date__lte=seven_days_ahead).count()
+    pending_verification_count = Allocation.objects.filter(end_date__lt=today, verification_status="pending").count()
+    confirmed_left_count = Allocation.objects.filter(verification_status="confirmed_left").count()
+    renewed_count = Allocation.objects.filter(verification_status="renewed").count()
+    retained_count = Allocation.objects.filter(verification_status="retained").count()
+
+    return Response({
+        "freed_in_this_check": freed_in_check,
+        "stats": {
+            "ended_count": ended_count,
+            "ending_today_count": ending_today_count,
+            "expiring_soon_count": expiring_soon_count,
+            "pending_verification_count": pending_verification_count,
+            "confirmed_left_count": confirmed_left_count,
+            "renewed_count": renewed_count,
+            "retained_count": retained_count,
+        },
+        "allocations": AllocationSerializer(allocations, many=True).data
+    })
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@transaction.atomic
+def verify_subscription(request, pk):
+    try:
+        alloc = Allocation.objects.select_for_update().select_related("student", "seat").get(pk=pk)
+    except Allocation.DoesNotExist:
+        return Response({"detail": "Subscription record not found."}, status=404)
+
+    status_val = request.data.get("verification_status")
+    notes = request.data.get("verification_notes")
+
+    if status_val not in ("pending", "confirmed_left", "renewed", "retained"):
+        return Response({"detail": "Invalid verification status value."}, status=400)
+
+    alloc.verification_status = status_val
+    if notes is not None:
+        alloc.verification_notes = notes.strip()
+    alloc.verified_at = timezone.now()
+
+    if status_val == "confirmed_left":
+        alloc.is_active = False
+
+    alloc.save()
+    return Response({
+        "detail": f"Status updated to '{alloc.get_verification_status_display()}' for {alloc.student.name}.",
+        "allocation": AllocationSerializer(alloc).data
+    })
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@transaction.atomic
+def renew_subscription(request, pk):
+    try:
+        old_alloc = Allocation.objects.select_for_update().select_related("student", "seat").get(pk=pk)
+    except Allocation.DoesNotExist:
+        return Response({"detail": "Previous allocation not found."}, status=404)
+
+    seat_number = request.data.get("seat_number", old_alloc.seat_id)
+    chair_type = request.data.get("chair_type", old_alloc.chair_type)
+    duration = request.data.get("duration_months", old_alloc.duration_months)
+    payment_mode = request.data.get("payment_mode", "UPI")
+    amount_paid_input = request.data.get("amount_paid")
+    notes = request.data.get("verification_notes", "")
+
+    try:
+        seat = Seat.objects.select_for_update().get(number=seat_number, active=True)
+    except Seat.DoesNotExist:
+        return Response({"detail": f"Seat {seat_number} not found."}, status=404)
+
+    if Allocation.objects.filter(seat=seat, is_active=True).exclude(pk=old_alloc.pk).exists():
+        return Response({"detail": f"Seat {seat_number} is currently occupied by another student. Please select an available seat."}, status=409)
+
+    if chair_type not in ("normal", "executive"):
+        return Response({"detail": "Invalid chair type."}, status=400)
+    if payment_mode not in ("UPI", "Cash", "Bank Transfer"):
+        return Response({"detail": "Invalid payment mode."}, status=400)
+
+    try:
+        duration = int(duration)
+        if duration < 0 or duration > 36:
+            raise ValueError()
+    except (ValueError, TypeError):
+        return Response({"detail": "Duration must be between 0 (trial) and 36 months."}, status=400)
+
+    today = timezone.localdate()
+    start_date_str = request.data.get("start_date")
+    if start_date_str:
+        from datetime import datetime
+        try:
+            start = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        except ValueError:
+            start = max(today, old_alloc.end_date)
+    else:
+        start = max(today, old_alloc.end_date)
+
+    if duration == 0:
+        total = 100
+        end_date = start + timedelta(days=1)
+    else:
+        total = (1390 if chair_type == "normal" else 1590) * duration
+        end_date = add_months(start, duration)
+
+    if amount_paid_input is None:
+        amount_paid = total
+    else:
+        try:
+            amount_paid = int(amount_paid_input)
+            if amount_paid < 0 or amount_paid > total:
+                raise ValueError()
+        except (ValueError, TypeError):
+            return Response({"detail": f"Amount paid must be between ₹0 and ₹{total}."}, status=400)
+
+    old_alloc.is_active = False
+    old_alloc.verification_status = "renewed"
+    old_alloc.verified_at = timezone.now()
+    if notes:
+        old_alloc.verification_notes = notes.strip()
+    old_alloc.save()
+
+    new_alloc = Allocation.objects.create(
+        student=old_alloc.student,
+        seat=seat,
+        chair_type=chair_type,
+        duration_months=duration,
+        start_date=start,
+        end_date=end_date,
+        total_amount=total,
+        amount_paid=amount_paid,
+        payment_mode=payment_mode,
+        is_active=True,
+        verification_status="pending"
+    )
+
+    if amount_paid > 0:
+        Transaction.objects.create(
+            allocation=new_alloc,
+            student=new_alloc.student,
+            seat=seat,
+            transaction_type="allocation",
+            description=f"Seat {seat.number} renewal ({duration} mo) - {new_alloc.student.name}",
+            amount=amount_paid,
+            payment_mode=payment_mode,
+            created_at=new_alloc.created_at
+        )
+
+    return Response({
+        "detail": f"Subscription renewed for {new_alloc.student.name} on Seat {seat.number} until {end_date}!",
+        "new_allocation": AllocationSerializer(new_alloc).data
+    }, status=201)

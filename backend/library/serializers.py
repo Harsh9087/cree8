@@ -44,16 +44,47 @@ class StudentSerializer(serializers.ModelSerializer):
 class AllocationSerializer(serializers.ModelSerializer):
     student_name = serializers.CharField(source="student.name", read_only=True)
     student_mobile = serializers.CharField(source="student.mobile", read_only=True)
+    student_gender = serializers.CharField(source="student.gender", read_only=True)
     seat_number = serializers.IntegerField(source="seat.number", read_only=True)
     amount_pending = serializers.IntegerField(read_only=True)
+    days_diff = serializers.SerializerMethodField()
+    status_category = serializers.SerializerMethodField()
+    is_seat_available = serializers.SerializerMethodField()
 
     class Meta:
         model = Allocation
-        fields = ["id", "student", "student_name", "student_mobile", "seat",
-                  "seat_number", "chair_type", "duration_months", "start_date",
-                  "end_date", "total_amount", "amount_paid", "amount_pending",
-                  "payment_mode", "is_active", "is_upgraded", "upgrade_fee", "upgraded_at", "created_at"]
-        read_only_fields = ["id", "end_date", "created_at", "is_active", "is_upgraded", "upgrade_fee", "upgraded_at"]
+        fields = [
+            "id", "student", "student_name", "student_mobile", "student_gender", "seat",
+            "seat_number", "chair_type", "duration_months", "start_date",
+            "end_date", "total_amount", "amount_paid", "amount_pending",
+            "payment_mode", "is_active", "is_upgraded", "upgrade_fee", "upgraded_at",
+            "verification_status", "verification_notes", "verified_at", "auto_freed",
+            "days_diff", "status_category", "is_seat_available", "created_at"
+        ]
+        read_only_fields = [
+            "id", "end_date", "created_at", "is_active", "is_upgraded",
+            "upgrade_fee", "upgraded_at", "auto_freed", "days_diff",
+            "status_category", "is_seat_available"
+        ]
+
+    def get_days_diff(self, obj):
+        today = timezone.localdate()
+        return (obj.end_date - today).days
+
+    def get_status_category(self, obj):
+        diff = (obj.end_date - timezone.localdate()).days
+        if diff < 0:
+            return "ended"
+        elif diff == 0:
+            return "ending_today"
+        elif 1 <= diff <= 3:
+            return "expiring_urgent"
+        elif 4 <= diff <= 7:
+            return "expiring_soon"
+        return "active"
+
+    def get_is_seat_available(self, obj):
+        return not Allocation.objects.filter(seat_id=obj.seat_id, is_active=True).exclude(pk=obj.pk).exists()
 
 class SeatSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()

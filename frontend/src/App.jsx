@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { api, login, signup } from './api'
 import { SEAT_COORDINATES } from './seatCoordinates'
-import { Armchair, Users, LayoutDashboard, LogOut, UserPlus, Search, RefreshCw, X, CheckCircle2, IndianRupee, CalendarDays, CreditCard, ChevronRight, Menu, Edit2, Sparkles, AlertCircle, Filter, Download, ArrowUpDown, Calendar, RotateCcw, SlidersHorizontal, FileText, Printer } from 'lucide-react'
+import { Armchair, Users, LayoutDashboard, LogOut, UserPlus, Search, RefreshCw, X, CheckCircle2, IndianRupee, CalendarDays, CreditCard, ChevronRight, Menu, Edit2, Sparkles, AlertCircle, Filter, Download, ArrowUpDown, Calendar, RotateCcw, SlidersHorizontal, FileText, Printer, Clock, UserCheck, UserX, Repeat, AlertTriangle, Check, HelpCircle } from 'lucide-react'
 import { jsPDF } from 'jspdf'
 import autoTable from 'jspdf-autotable'
 
@@ -327,17 +327,36 @@ function App() {
   const [allocationForm,setAllocationForm] = useState({student:'',chair_type:'normal',duration_months:1,payment_mode:'UPI',amount_paid:'1390',start_date:new Date().toISOString().slice(0,10)})
   const [upgradePaymentMode,setUpgradePaymentMode] = useState('UPI')
   const [saving,setSaving] = useState(false)
+  const [subscriptionsData, setSubscriptionsData] = useState({ stats: {}, allocations: [] })
+  const [subFilter, setSubFilter] = useState('all')
+  const [subSearch, setSubSearch] = useState('')
+  const [verifyingAlloc, setVerifyingAlloc] = useState(null)
+  const [verifyForm, setVerifyForm] = useState({ verification_status: 'confirmed_left', verification_notes: '' })
+  const [renewingAlloc, setRenewingAlloc] = useState(null)
+  const [renewForm, setRenewForm] = useState({
+    seat_number: '',
+    chair_type: 'normal',
+    duration_months: 1,
+    payment_mode: 'UPI',
+    amount_paid: '1390',
+    start_date: new Date().toISOString().slice(0, 10),
+    verification_notes: ''
+  })
   async function loadAll() {
     setLoading(true); setError('')
     try {
-      const [s,st,d,txns,allc] = await Promise.all([
+      const [s,st,d,txns,allc,subs] = await Promise.all([
         api('/seats/'),
         api('/students/'),
         api('/dashboard/'),
         api('/transactions/'),
-        api('/allocations/')
+        api('/allocations/'),
+        api('/subscriptions/')
       ])
-      setSeats(s); setStudents(st); setDashboard(d); setTransactions(txns); setAllocations(allc)
+      setSeats(s); setStudents(st); setDashboard(d); setTransactions(txns); setAllocations(allc); setSubscriptionsData(subs)
+      if (subs?.freed_in_this_check > 0) {
+        setNotice(`Auto-freed ${subs.freed_in_this_check} seat(s) whose subscription period ended.`)
+      }
     } catch(e) { setError(e.message) } finally { setLoading(false) }
   }
   useEffect(()=>{ api('/auth/me/').then(setUser).catch(()=>{}) },[])
@@ -459,6 +478,134 @@ function App() {
       setSaving(false)
     }
   }
+
+  function openVerifyModal(alloc) {
+    setVerifyingAlloc(alloc)
+    setVerifyForm({
+      verification_status: alloc.verification_status && alloc.verification_status !== 'pending' ? alloc.verification_status : 'confirmed_left',
+      verification_notes: alloc.verification_notes || ''
+    })
+  }
+
+  async function handleVerifySubmit(e) {
+    if (e) e.preventDefault()
+    if (!verifyingAlloc) return
+    if (verifyForm.verification_status === 'renew') {
+      const target = verifyingAlloc
+      setVerifyingAlloc(null)
+      openRenewModal(target)
+      return
+    }
+    setSaving(true); setError(''); setNotice('')
+    try {
+      const res = await api(`/allocations/${verifyingAlloc.id}/verify/`, {
+        method: 'POST',
+        body: JSON.stringify({
+          verification_status: verifyForm.verification_status,
+          verification_notes: verifyForm.verification_notes
+        })
+      })
+      setNotice(res.detail || 'Student verification status updated.')
+      setVerifyingAlloc(null)
+      await loadAll()
+    } catch(err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function quickVerifyLeft(alloc) {
+    if (!window.confirm(`Confirm that ${alloc.student_name} has officially left Cree8 Library? The seat was auto-freed.`)) return
+    setSaving(true); setError(''); setNotice('')
+    try {
+      const res = await api(`/allocations/${alloc.id}/verify/`, {
+        method: 'POST',
+        body: JSON.stringify({
+          verification_status: 'confirmed_left',
+          verification_notes: 'Confirmed departed via quick verification'
+        })
+      })
+      setNotice(res.detail || `Confirmed departure for ${alloc.student_name}.`)
+      await loadAll()
+    } catch(err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function openRenewModal(alloc) {
+    const todayStr = new Date().toISOString().slice(0, 10)
+    const defaultStart = alloc.end_date && alloc.end_date > todayStr ? alloc.end_date : todayStr
+    const defaultDuration = alloc.duration_months || 1
+    const defaultChair = alloc.chair_type || 'normal'
+    const defaultAmount = String(priceFor(defaultChair, defaultDuration))
+
+    setRenewingAlloc(alloc)
+    setRenewForm({
+      seat_number: alloc.seat_number,
+      chair_type: defaultChair,
+      duration_months: defaultDuration,
+      payment_mode: 'UPI',
+      amount_paid: defaultAmount,
+      start_date: defaultStart,
+      verification_notes: `Renewed subscription on ${todayStr}`
+    })
+  }
+
+  function updateRenewForm(k, v) {
+    setRenewForm(f => {
+      const next = { ...f, [k]: v }
+      if (k === 'chair_type' || k === 'duration_months') {
+        next.amount_paid = String(priceFor(next.chair_type, next.duration_months))
+      }
+      return next
+    })
+  }
+
+  async function handleRenewSubmit(e) {
+    if (e) e.preventDefault()
+    if (!renewingAlloc) return
+    setSaving(true); setError(''); setNotice('')
+    try {
+      const res = await api(`/allocations/${renewingAlloc.id}/renew/`, {
+        method: 'POST',
+        body: JSON.stringify({
+          ...renewForm,
+          seat_number: Number(renewForm.seat_number),
+          duration_months: Number(renewForm.duration_months),
+          amount_paid: Number(renewForm.amount_paid)
+        })
+      })
+      setNotice(res.detail || 'Subscription renewed and seat allocated successfully!')
+      setRenewingAlloc(null)
+      await loadAll()
+    } catch(err) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const filteredSubscriptions = useMemo(() => {
+    const list = subscriptionsData?.allocations || []
+    return list.filter(item => {
+      if (subSearch.trim()) {
+        const q = subSearch.trim().toLowerCase()
+        const text = `${item.student_name || ''} ${item.student_mobile || ''} Seat ${item.seat_number || ''} ${item.chair_type || ''} ${item.verification_notes || ''}`.toLowerCase()
+        if (!text.includes(q)) return false
+      }
+      if (subFilter === 'ended') return item.days_diff < 0
+      if (subFilter === 'today') return item.days_diff === 0
+      if (subFilter === 'expiring_soon') return item.days_diff > 0 && item.days_diff <= 7
+      if (subFilter === 'pending') return item.verification_status === 'pending' && item.days_diff <= 0
+      if (subFilter === 'confirmed_left') return item.verification_status === 'confirmed_left'
+      if (subFilter === 'renewed') return item.verification_status === 'renewed'
+      if (subFilter === 'retained') return item.verification_status === 'retained'
+      return true
+    })
+  }, [subscriptionsData, subFilter, subSearch])
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(t => {
@@ -932,6 +1079,9 @@ function App() {
       <button className={`nav-item ${page === 'pending' ? 'active' : ''}`} onClick={() => navigateTo('pending')}>
         <AlertCircle size={18} /> Pending fees {activePendingAllocations.length > 0 && <span className="nav-count amber">{activePendingAllocations.length}</span>}
       </button>
+      <button className={`nav-item ${page === 'subscriptions' ? 'active' : ''}`} onClick={() => navigateTo('subscriptions')}>
+        <Clock size={18} /> Subscriptions {subscriptionsData?.stats?.pending_verification_count > 0 && <span className="nav-count purple">{subscriptionsData.stats.pending_verification_count}</span>}
+      </button>
 
       <div className="sidebar-bottom">
         <div className="admin-avatar">{(user.username || 'A').slice(0, 1).toUpperCase()}</div>
@@ -944,9 +1094,43 @@ function App() {
         </button>
       </div>
     </aside>
-    <main className="main-content"><header className="topbar"><div><p className="eyebrow">CREE8 STUDY & CO-WORK / ADMIN</p><h1>{page==='dashboard'?'Overview':page==='seats'?'Seat availability':page==='transactions'?'Transactions':page==='pending'?'Pending payments':'Student directory'}</h1></div><div className="top-actions"><button className="secondary" onClick={loadAll}><RefreshCw size={16}/> Refresh</button><button className="primary" onClick={()=>setShowRegister(true)}><UserPlus size={16}/> Register student</button></div></header>
+    <main className="main-content"><header className="topbar"><div><p className="eyebrow">CREE8 STUDY & CO-WORK / ADMIN</p><h1>{page==='dashboard'?'Overview':page==='seats'?'Seat availability':page==='transactions'?'Transactions':page==='pending'?'Pending payments':page==='subscriptions'?'Subscription Status & Expiry':'Student directory'}</h1></div><div className="top-actions"><button className="secondary" onClick={loadAll}><RefreshCw size={16}/> Refresh</button><button className="primary" onClick={()=>setShowRegister(true)}><UserPlus size={16}/> Register student</button></div></header>
       {error&&<div className="alert error"><span>{error}</span><button onClick={()=>setError('')}><X size={16}/></button></div>}{notice&&<div className="alert success"><CheckCircle2 size={18}/><span>{notice}</span><button onClick={()=>setNotice('')}><X size={16}/></button></div>}
-      {page==='dashboard'&&<><section className="stats-grid"><Stat icon={<Armchair/>} label="Total seats" value={dashboard.total_seats??64} sub="64 Tables · Cree8 Study" tone="blue"/><Stat icon={<CheckCircle2/>} label="Available seats" value={dashboard.available_seats??64} sub={`${dashboard.occupied_seats??0} active members`} tone="green"/><Stat icon={<Users/>} label="Occupied seats" value={dashboard.occupied_seats??0} sub={`${dashboard.occupied_executive??0} Exec · ${dashboard.occupied_normal??0} Normal`} tone="red"/><div onClick={()=>setPage('pending')} style={{cursor:'pointer'}} title="View Pending Payments"><Stat icon={<IndianRupee/>} label="Pending payments" value={`₹${dashboard.amount_pending??0}`} tone="amber" sub="Click to view details →"/></div></section><section className="content-card"><div className="section-heading"><div><h2>Live seat map</h2><p>Click any seat to allocate or view its details.</p></div><button className="text-button" onClick={()=>setPage('seats')}>Open full map <ChevronRight size={16}/></button></div><SeatMap seats={seats} onSeatClick={openSeat}/></section><section className="content-card"><div className="section-heading"><div><h2>Recently registered students</h2><p>Students saved in your library database.</p></div><button className="text-button" onClick={()=>setPage('students')}>View all <ChevronRight size={16}/></button></div><StudentTable students={students.slice(0,5)} onEdit={openEditStudent}/></section></>}
+      {page==='dashboard'&&<>
+        {(subscriptionsData?.stats?.pending_verification_count > 0 || subscriptionsData?.stats?.ending_today_count > 0) && (
+          <div className="subscription-expiry-alert">
+            <div className="sub-alert-content">
+              <div className="sub-alert-icon">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <b>Seat Expiry Notice: Verify Student Departure</b>
+                <p>
+                  {subscriptionsData?.stats?.pending_verification_count > 0 ? `${subscriptionsData.stats.pending_verification_count} subscription(s) have ended. Expired seats are automatically freed. ` : ''}
+                  {subscriptionsData?.stats?.ending_today_count > 0 ? `${subscriptionsData.stats.ending_today_count} subscription(s) ending today. ` : ''}
+                  Please verify whether students have left Cree8 or wish to renew their tenure.
+                </p>
+              </div>
+            </div>
+            <button className="sub-alert-action-btn" onClick={() => navigateTo('subscriptions')}>
+              Review Subscriptions <ChevronRight size={16} />
+            </button>
+          </div>
+        )}
+        <section className="stats-grid">
+          <Stat icon={<Armchair/>} label="Total seats" value={dashboard.total_seats??64} sub="64 Tables · Cree8 Study" tone="blue"/>
+          <Stat icon={<CheckCircle2/>} label="Available seats" value={dashboard.available_seats??64} sub={`${dashboard.occupied_seats??0} active members`} tone="green"/>
+          <Stat icon={<Users/>} label="Occupied seats" value={dashboard.occupied_seats??0} sub={`${dashboard.occupied_executive??0} Exec · ${dashboard.occupied_normal??0} Normal`} tone="red"/>
+          <div onClick={()=>navigateTo('pending')} style={{cursor:'pointer'}} title="View Pending Payments">
+            <Stat icon={<IndianRupee/>} label="Pending payments" value={`₹${dashboard.amount_pending??0}`} tone="amber" sub="Click to view details →"/>
+          </div>
+          <div onClick={()=>navigateTo('subscriptions')} style={{cursor:'pointer'}} title="View Subscriptions & Auto-Freed Seats">
+            <Stat icon={<Clock/>} label="Subscriptions ended" value={subscriptionsData?.stats?.ended_count ?? dashboard.ended_subscriptions ?? 0} tone="purple" sub={`${subscriptionsData?.stats?.pending_verification_count ?? 0} require verification →`}/>
+          </div>
+        </section>
+        <section className="content-card"><div className="section-heading"><div><h2>Live seat map</h2><p>Click any seat to allocate or view its details.</p></div><button className="text-button" onClick={()=>setPage('seats')}>Open full map <ChevronRight size={16}/></button></div><SeatMap seats={seats} onSeatClick={openSeat}/></section>
+        <section className="content-card"><div className="section-heading"><div><h2>Recently registered students</h2><p>Students saved in your library database.</p></div><button className="text-button" onClick={()=>setPage('students')}>View all <ChevronRight size={16}/></button></div><StudentTable students={students.slice(0,5)} onEdit={openEditStudent}/></section>
+      </>}
       {page==='seats'&&<section className="content-card"><div className="section-heading"><div><h2>64-seat floor layout</h2><p>Normal & Executive Chairs · 64 Total Tables</p><p className="muted">Green = available · Red = occupied (Normal) · Orange = occupied (Executive)</p></div><div className="map-summary">{dashboard.available_seats??64} available / {dashboard.total_seats??64}</div></div><SeatMap seats={seats} onSeatClick={openSeat}/></section>}
       {page==='students'&&<>
         <section className="stats-grid">
@@ -1049,6 +1233,107 @@ function App() {
             </div>
           </div>
           <PendingTable allocations={filteredPending} onCollect={openCollectModal}/>
+        </section>
+      </>}
+      {page==='subscriptions'&&<>
+        <section className="stats-grid">
+          <Stat icon={<Armchair/>} label="Ended & Auto-Freed" value={subscriptionsData?.stats?.ended_count || 0} sub="Seats automatically released" tone="red"/>
+          <Stat icon={<Clock/>} label="Ending Today" value={subscriptionsData?.stats?.ending_today_count || 0} sub="Expiring today" tone="amber"/>
+          <Stat icon={<CalendarDays/>} label="Expiring in 7 Days" value={subscriptionsData?.stats?.expiring_soon_count || 0} sub="Upcoming renewal alert" tone="blue"/>
+          <Stat icon={<HelpCircle/>} label="Unverified Students" value={subscriptionsData?.stats?.pending_verification_count || 0} sub="Requires admin verification" tone="purple"/>
+        </section>
+
+        <section className="content-card">
+          <div className="section-heading">
+            <div>
+              <h2>Subscription Expiry & Seat Freeing Management</h2>
+              <p>When a subscription ends, the seat is automatically freed. Verify below whether the student has completed their tenure and left, or wishes to renew.</p>
+            </div>
+            <button className="secondary" onClick={loadAll}>
+              <RefreshCw size={16}/> Refresh & Check
+            </button>
+          </div>
+
+          <div className="subscriptions-controls-bar">
+            <div className="search-box" style={{marginBottom: 0}}>
+              <Search size={18}/>
+              <input
+                placeholder="Search by student name, mobile, seat number, or admin remarks..."
+                value={subSearch}
+                onChange={e=>setSubSearch(e.target.value)}
+              />
+              {subSearch && (
+                <button
+                  type="button"
+                  className="icon-button"
+                  style={{border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px'}}
+                  onClick={() => setSubSearch('')}
+                  title="Clear search"
+                >
+                  <X size={16} />
+                </button>
+              )}
+            </div>
+
+            <div className="filter-toggle-group sub-filters-scroll">
+              <button
+                type="button"
+                className={`filter-tab-btn ${subFilter==='all'?'active':''}`}
+                onClick={()=>setSubFilter('all')}
+              >
+                All ({subscriptionsData?.allocations?.length || 0})
+              </button>
+              <button
+                type="button"
+                className={`filter-tab-btn ${subFilter==='ended'?'active':''}`}
+                onClick={()=>setSubFilter('ended')}
+              >
+                Ended & Freed ({subscriptionsData?.stats?.ended_count || 0})
+              </button>
+              <button
+                type="button"
+                className={`filter-tab-btn ${subFilter==='today'?'active':''}`}
+                onClick={()=>setSubFilter('today')}
+              >
+                Ending Today ({subscriptionsData?.stats?.ending_today_count || 0})
+              </button>
+              <button
+                type="button"
+                className={`filter-tab-btn ${subFilter==='expiring_soon'?'active':''}`}
+                onClick={()=>setSubFilter('expiring_soon')}
+              >
+                Next 7 Days ({subscriptionsData?.stats?.expiring_soon_count || 0})
+              </button>
+              <button
+                type="button"
+                className={`filter-tab-btn ${subFilter==='pending'?'active':''}`}
+                onClick={()=>setSubFilter('pending')}
+              >
+                Needs Verification ({subscriptionsData?.stats?.pending_verification_count || 0})
+              </button>
+              <button
+                type="button"
+                className={`filter-tab-btn ${subFilter==='confirmed_left'?'active':''}`}
+                onClick={()=>setSubFilter('confirmed_left')}
+              >
+                Confirmed Left ({subscriptionsData?.stats?.confirmed_left_count || 0})
+              </button>
+              <button
+                type="button"
+                className={`filter-tab-btn ${subFilter==='renewed'?'active':''}`}
+                onClick={()=>setSubFilter('renewed')}
+              >
+                Renewed ({subscriptionsData?.stats?.renewed_count || 0})
+              </button>
+            </div>
+          </div>
+
+          <SubscriptionTable
+            subscriptions={filteredSubscriptions}
+            onVerify={openVerifyModal}
+            onQuickVerifyLeft={quickVerifyLeft}
+            onRenew={openRenewModal}
+          />
         </section>
       </>}
     </main>
@@ -1203,6 +1488,241 @@ function App() {
         </form>
       )}
     </Modal>}
+    {verifyingAlloc && (
+      <Modal title={`Verify Student Departure · Seat ${verifyingAlloc.seat_number}`} onClose={() => setVerifyingAlloc(null)}>
+        <form className="form-stack modal-form" onSubmit={handleVerifySubmit}>
+          <div className="occupied-banner" style={{background: '#f8fafc', borderColor: '#cbd5e1', color: '#1e293b', marginBottom: '14px'}}>
+            <Armchair size={17} style={{color: '#0284c7'}}/>
+            <div>
+              <b>{verifyingAlloc.student_name}</b> ({verifyingAlloc.student_mobile})
+              <small style={{display: 'block', color: '#64748b', fontSize: '11.5px', marginTop: '2px'}}>
+                Seat {verifyingAlloc.seat_number} · Expired on {verifyingAlloc.end_date} ({verifyingAlloc.days_diff < 0 ? `${-verifyingAlloc.days_diff} day(s) ago` : verifyingAlloc.days_diff === 0 ? 'Today' : `in ${verifyingAlloc.days_diff} days`})
+              </small>
+            </div>
+          </div>
+
+          <div className="verify-seat-status-box">
+            <CheckCircle2 size={16} style={{color: '#16a34a'}} />
+            <span>
+              <b>Seat Status:</b> {verifyingAlloc.is_seat_available ? `Seat ${verifyingAlloc.seat_number} has been automatically freed and is now available for new bookings.` : `Seat ${verifyingAlloc.seat_number} is currently occupied/reallocated.`}
+            </span>
+          </div>
+
+          <fieldset className="verify-options-group">
+            <legend>Did this student leave Cree8 Library, or are they continuing? *</legend>
+
+            <label className={`verify-choice-card ${verifyForm.verification_status === 'confirmed_left' ? 'selected' : ''}`}>
+              <input
+                type="radio"
+                name="verification_status"
+                value="confirmed_left"
+                checked={verifyForm.verification_status === 'confirmed_left'}
+                onChange={() => setVerifyForm(f => ({ ...f, verification_status: 'confirmed_left' }))}
+              />
+              <div className="choice-card-content">
+                <div className="choice-title">
+                  <UserX size={16} style={{color: '#dc2626'}} />
+                  <b>Student has ended & left Cree8 (Confirmed Departure)</b>
+                </div>
+                <p>Student has completed their tenure and vacating the seat. The seat remains freed for other members.</p>
+              </div>
+            </label>
+
+            <label className={`verify-choice-card ${verifyForm.verification_status === 'renew' ? 'selected' : ''}`}>
+              <input
+                type="radio"
+                name="verification_status"
+                value="renew"
+                checked={verifyForm.verification_status === 'renew'}
+                onChange={() => setVerifyForm(f => ({ ...f, verification_status: 'renew' }))}
+              />
+              <div className="choice-card-content">
+                <div className="choice-title">
+                  <Repeat size={16} style={{color: '#16a34a'}} />
+                  <b>Student is continuing / Wants to renew seat now</b>
+                </div>
+                <p>Proceed immediately to the renewal form to extend their membership and assign a seat.</p>
+              </div>
+            </label>
+
+            <label className={`verify-choice-card ${verifyForm.verification_status === 'retained' ? 'selected' : ''}`}>
+              <input
+                type="radio"
+                name="verification_status"
+                value="retained"
+                checked={verifyForm.verification_status === 'retained'}
+                onChange={() => setVerifyForm(f => ({ ...f, verification_status: 'retained' }))}
+              />
+              <div className="choice-card-content">
+                <div className="choice-title">
+                  <Clock size={16} style={{color: '#0284c7'}} />
+                  <b>Grace period / Temporarily retained</b>
+                </div>
+                <p>Student requested grace days before renewing or vacating. Temporarily keep on file.</p>
+              </div>
+            </label>
+
+            <label className={`verify-choice-card ${verifyForm.verification_status === 'pending' ? 'selected' : ''}`}>
+              <input
+                type="radio"
+                name="verification_status"
+                value="pending"
+                checked={verifyForm.verification_status === 'pending'}
+                onChange={() => setVerifyForm(f => ({ ...f, verification_status: 'pending' }))}
+              />
+              <div className="choice-card-content">
+                <div className="choice-title">
+                  <HelpCircle size={16} style={{color: '#ea580c'}} />
+                  <b>Keep as Pending / Follow up later</b>
+                </div>
+                <p>Yet to contact student or student has not replied yet.</p>
+              </div>
+            </label>
+          </fieldset>
+
+          <label>
+            Admin Remarks / Verification Notes
+            <textarea
+              rows="3"
+              value={verifyForm.verification_notes}
+              onChange={e => setVerifyForm(f => ({ ...f, verification_notes: e.target.value }))}
+              placeholder="e.g. Exam completed, locker key returned, spoke on phone, or student will pay next Monday..."
+              className="notes-textarea"
+            />
+          </label>
+
+          <div className="modal-actions" style={{marginTop: '16px'}}>
+            <button type="button" className="secondary" onClick={() => setVerifyingAlloc(null)}>Cancel</button>
+            <button className="primary" disabled={saving}>
+              {saving ? 'Saving...' : verifyForm.verification_status === 'renew' ? 'Proceed to Renew Seat →' : 'Save Verification'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    )}
+
+    {renewingAlloc && (
+      <Modal title={`Renew Subscription · ${renewingAlloc.student_name}`} onClose={() => setRenewingAlloc(null)}>
+        <form className="form-stack modal-form" onSubmit={handleRenewSubmit}>
+          <div className="occupied-banner" style={{background: '#f0fdf4', borderColor: '#bbf7d0', color: '#14532d', marginBottom: '14px'}}>
+            <Repeat size={16} style={{color: '#16a34a'}}/>
+            <b>Renewing membership for {renewingAlloc.student_name}</b>
+          </div>
+
+          <label>
+            Seat to allocate *
+            <select
+              value={renewForm.seat_number}
+              onChange={e => updateRenewForm('seat_number', e.target.value)}
+              required
+            >
+              <option value={renewingAlloc.seat_number}>
+                Previous Seat {renewingAlloc.seat_number} {renewingAlloc.is_seat_available ? '(Available)' : '(Currently Occupied - choose another if needed)'}
+              </option>
+              {seats.filter(s => s.status === 'available' && s.number !== renewingAlloc.seat_number).map(s => (
+                <option key={s.number} value={s.number}>
+                  Seat {s.number} (Available)
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Start date of renewal *
+            <input
+              type="date"
+              value={renewForm.start_date}
+              onChange={e => updateRenewForm('start_date', e.target.value)}
+              required
+            />
+          </label>
+
+          <fieldset>
+            <legend>Chair type *</legend>
+            <label className="choice-card">
+              <input
+                type="radio"
+                checked={renewForm.chair_type === 'normal'}
+                onChange={() => updateRenewForm('chair_type', 'normal')}
+              />
+              <span><b>Normal chair</b><small>₹1,390/mo</small></span>
+            </label>
+            <label className="choice-card">
+              <input
+                type="radio"
+                checked={renewForm.chair_type === 'executive'}
+                onChange={() => updateRenewForm('chair_type', 'executive')}
+              />
+              <span><b>Executive chair</b><small>₹1,590/mo</small></span>
+            </label>
+          </fieldset>
+
+          <label>
+            Membership duration *
+            <select
+              value={renewForm.duration_months}
+              onChange={e => updateRenewForm('duration_months', e.target.value)}
+            >
+              <option value="0">1 day trial (₹100)</option>
+              <option value="1">1 month</option>
+              <option value="2">2 months</option>
+              <option value="3">3 months</option>
+              <option value="6">6 months</option>
+              <option value="12">12 months</option>
+            </select>
+          </label>
+
+          <label>
+            Payment channel
+            <select
+              value={renewForm.payment_mode}
+              onChange={e => updateRenewForm('payment_mode', e.target.value)}
+            >
+              <option>UPI</option>
+              <option>Cash</option>
+              <option>Bank Transfer</option>
+            </select>
+          </label>
+
+          <label>
+            Amount paid (₹) *
+            <input
+              type="number"
+              min="0"
+              max={priceFor(renewForm.chair_type, renewForm.duration_months)}
+              value={renewForm.amount_paid}
+              onChange={e => updateRenewForm('amount_paid', e.target.value)}
+              required
+            />
+          </label>
+
+          <div className="price-summary">
+            <span>Total renewal amount</span>
+            <b>₹{priceFor(renewForm.chair_type, renewForm.duration_months).toLocaleString('en-IN')}</b>
+            <small>
+              Pending balance: ₹{Math.max(priceFor(renewForm.chair_type, renewForm.duration_months) - Number(renewForm.amount_paid || 0), 0).toLocaleString('en-IN')}
+            </small>
+          </div>
+
+          <label>
+            Verification / Renewal Remarks
+            <input
+              value={renewForm.verification_notes}
+              onChange={e => updateRenewForm('verification_notes', e.target.value)}
+              placeholder="e.g. Paid in full via GPay for next month"
+            />
+          </label>
+
+          <div className="modal-actions" style={{marginTop: '16px'}}>
+            <button type="button" className="secondary" onClick={() => setRenewingAlloc(null)}>Cancel</button>
+            <button className="primary" disabled={saving}>
+              {saving ? 'Renewing...' : 'Confirm Renewal & Allocate Seat'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    )}
+
     {/* Mobile Bottom Navigation Bar (Dock) */}
     <nav className="mobile-bottom-bar" aria-label="Mobile Navigation">
       <button
@@ -1210,7 +1730,7 @@ function App() {
         className={`mobile-bottom-item ${page === 'dashboard' ? 'active' : ''}`}
         onClick={() => navigateTo('dashboard')}
       >
-        <LayoutDashboard size={19} />
+        <LayoutDashboard size={18} />
         <span>Overview</span>
       </button>
       <button
@@ -1218,7 +1738,7 @@ function App() {
         className={`mobile-bottom-item ${page === 'seats' ? 'active' : ''}`}
         onClick={() => navigateTo('seats')}
       >
-        <Armchair size={19} />
+        <Armchair size={18} />
         <span>Seats</span>
       </button>
       <button
@@ -1227,7 +1747,7 @@ function App() {
         onClick={() => navigateTo('students')}
       >
         <div className="mobile-item-icon-wrap">
-          <Users size={19} />
+          <Users size={18} />
           {students.length > 0 && <span className="mobile-tab-badge">{students.length}</span>}
         </div>
         <span>Students</span>
@@ -1237,7 +1757,7 @@ function App() {
         className={`mobile-bottom-item ${page === 'transactions' ? 'active' : ''}`}
         onClick={() => navigateTo('transactions')}
       >
-        <IndianRupee size={19} />
+        <IndianRupee size={18} />
         <span>Txns</span>
       </button>
       <button
@@ -1246,10 +1766,21 @@ function App() {
         onClick={() => navigateTo('pending')}
       >
         <div className="mobile-item-icon-wrap">
-          <AlertCircle size={19} />
+          <AlertCircle size={18} />
           {activePendingAllocations.length > 0 && <span className="mobile-tab-badge amber">{activePendingAllocations.length}</span>}
         </div>
         <span>Pending</span>
+      </button>
+      <button
+        type="button"
+        className={`mobile-bottom-item ${page === 'subscriptions' ? 'active' : ''}`}
+        onClick={() => navigateTo('subscriptions')}
+      >
+        <div className="mobile-item-icon-wrap">
+          <Clock size={18} />
+          {subscriptionsData?.stats?.pending_verification_count > 0 && <span className="mobile-tab-badge purple">{subscriptionsData.stats.pending_verification_count}</span>}
+        </div>
+        <span>Expiry</span>
       </button>
     </nav>
   </div>
@@ -1709,6 +2240,177 @@ function PendingTable({ allocations, onCollect }) {
                     <button className="collect-btn" onClick={() => onCollect(a)} title="Collect remaining fee">
                       Collect Due
                     </button>
+                  </td>
+                </tr>
+              )
+            })
+          )}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+function SubscriptionTable({ subscriptions, onVerify, onQuickVerifyLeft, onRenew }) {
+  return (
+    <div className="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th>Seat & Availability</th>
+            <th>Validity & Expiry</th>
+            <th>Auto-Free Status</th>
+            <th>Verification Status</th>
+            <th>Admin Remarks</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {subscriptions.length === 0 ? (
+            <tr>
+              <td colSpan="7" className="empty-cell">
+                <CheckCircle2 size={32} style={{color: '#10b981', margin: '0 auto 8px', display: 'block'}}/>
+                <b>No matching subscriptions found!</b>
+                <p className="muted" style={{margin: '4px 0 0', fontSize: '12px'}}>Try switching filter tabs or clearing your search query.</p>
+              </td>
+            </tr>
+          ) : (
+            subscriptions.map(s => {
+              const days = s.days_diff
+              const isEnded = days < 0
+              const isToday = days === 0
+              const isSoon = days > 0 && days <= 7
+              const isPending = s.verification_status === 'pending'
+              const isConfirmedLeft = s.verification_status === 'confirmed_left'
+              const isRenewed = s.verification_status === 'renewed'
+              const isRetained = s.verification_status === 'retained'
+
+              return (
+                <tr key={s.id} className={isEnded && isPending ? 'row-highlight-pending' : ''}>
+                  <td>
+                    <div className="student-name">
+                      <span className="student-avatar">{s.student_name.slice(0, 1).toUpperCase()}</span>
+                      <div>
+                        <b>{s.student_name}</b>
+                        <br/>
+                        <small className="muted">{s.student_mobile}</small>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <b>Seat {s.seat_number}</b>
+                    <div style={{marginTop: '2px'}}>
+                      <span className="pill" style={{textTransform: 'capitalize'}}>
+                        {s.chair_type} chair
+                      </span>
+                    </div>
+                    <small style={{display: 'block', marginTop: '4px', fontSize: '11px', color: s.is_seat_available ? '#16a34a' : '#64748b'}}>
+                      {s.is_seat_available ? '● Seat is Available' : '○ Seat Reallocated'}
+                    </small>
+                  </td>
+                  <td>
+                    <b>{s.duration_months === 0 ? '1 day trial' : `${s.duration_months} mo`}</b>
+                    <small className="muted" style={{display: 'block', margin: '2px 0 4px'}}>
+                      {s.start_date} to {s.end_date}
+                    </small>
+                    {isEnded && (
+                      <span className="expiry-pill ended">
+                        <Clock size={12}/> Ended {-days}d ago
+                      </span>
+                    )}
+                    {isToday && (
+                      <span className="expiry-pill today">
+                        <AlertCircle size={12}/> Ends Today
+                      </span>
+                    )}
+                    {isSoon && (
+                      <span className="expiry-pill urgent">
+                        <Clock size={12}/> Expires in {days}d
+                      </span>
+                    )}
+                    {!isEnded && !isToday && !isSoon && (
+                      <span className="expiry-pill active">
+                        <CheckCircle2 size={12}/> {days}d left
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    {s.auto_freed ? (
+                      <span className="auto-freed-badge">
+                        <Check size={12}/> Auto-Freed
+                      </span>
+                    ) : !s.is_active ? (
+                      <span className="auto-freed-badge manual">
+                        Released
+                      </span>
+                    ) : (
+                      <span className="active-seat-pill">
+                        Active Seat
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    {isPending && (
+                      <span className="verify-pill pending">
+                        <HelpCircle size={12}/> Unverified
+                      </span>
+                    )}
+                    {isConfirmedLeft && (
+                      <span className="verify-pill confirmed">
+                        <UserX size={12}/> Confirmed Left
+                      </span>
+                    )}
+                    {isRenewed && (
+                      <span className="verify-pill renewed">
+                        <Repeat size={12}/> Renewed
+                      </span>
+                    )}
+                    {isRetained && (
+                      <span className="verify-pill retained">
+                        <Clock size={12}/> Grace Period
+                      </span>
+                    )}
+                    {s.verified_at && (
+                      <small className="muted" style={{display: 'block', marginTop: '3px', fontSize: '10.5px'}}>
+                        {new Date(s.verified_at).toLocaleDateString([], {day: '2-digit', month: 'short'})}
+                      </small>
+                    )}
+                  </td>
+                  <td>
+                    {s.verification_notes ? (
+                      <div className="verify-note-box" title={s.verification_notes}>
+                        💬 {s.verification_notes}
+                      </div>
+                    ) : (
+                      <span className="muted" style={{fontSize: '12px'}}>—</span>
+                    )}
+                  </td>
+                  <td>
+                    <div className="sub-actions-stack">
+                      <button
+                        className="btn-verify-action"
+                        onClick={() => onVerify(s)}
+                        title="Verify whether student has ended or is continuing"
+                      >
+                        <UserCheck size={13}/> Verify
+                      </button>
+                      {isPending && isEnded && (
+                        <button
+                          className="btn-quick-left"
+                          onClick={() => onQuickVerifyLeft(s)}
+                          title="Quick 1-click confirmation that student has left library"
+                        >
+                          <UserX size={13}/> Left
+                        </button>
+                      )}
+                      <button
+                        className="btn-renew-action"
+                        onClick={() => onRenew(s)}
+                        title="Renew subscription"
+                      >
+                        <Repeat size={13}/> Renew
+                      </button>
+                    </div>
                   </td>
                 </tr>
               )

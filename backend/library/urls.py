@@ -15,6 +15,9 @@ urlpatterns = [
     path("seats/<int:seat_number>/release/", views.release_seat),
     path("allocations/", views.AllocationList.as_view()),
     path("allocations/<int:pk>/pay/", views.pay_pending_allocation),
+    path("allocations/<int:pk>/verify/", views.verify_subscription),
+    path("allocations/<int:pk>/renew/", views.renew_subscription),
+    path("subscriptions/", views.subscriptions_view),
     path("transactions/", views.TransactionList.as_view()),
     path("dashboard/", views.dashboard_view),
 ]
