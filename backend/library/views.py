@@ -365,7 +365,7 @@ def subscriptions_view(request):
     today = timezone.localdate()
     seven_days_ahead = today + timedelta(days=7)
 
-    allocations = Allocation.objects.select_related("student", "seat").all().order_by("-end_date", "-created_at")
+    allocations = Allocation.objects.select_related("student", "seat").all().order_by("end_date", "created_at")
 
     ended_count = Allocation.objects.filter(end_date__lt=today).count()
     ending_today_count = Allocation.objects.filter(end_date=today).count()

@@ -589,7 +589,14 @@ function App() {
   }
 
   const filteredSubscriptions = useMemo(() => {
-    const list = subscriptionsData?.allocations || []
+    const list = (subscriptionsData?.allocations || []).slice()
+    // Sort so the ones ending first are displayed first (earliest end_date first)
+    list.sort((a, b) => {
+      if (a.end_date !== b.end_date) {
+        return (a.end_date || '').localeCompare(b.end_date || '')
+      }
+      return Number(a.seat_number) - Number(b.seat_number)
+    })
     return list.filter(item => {
       if (subSearch.trim()) {
         const q = subSearch.trim().toLowerCase()
