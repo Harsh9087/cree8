@@ -1,6 +1,6 @@
 # Study Library Seat Management System
 
-A full-stack starter project for managing a 51-seat study library.
+A full-stack starter project for managing a 64-seat study library.
 
 ## Stack
 - Frontend: React + Vite
@@ -10,8 +10,8 @@ A full-stack starter project for managing a 51-seat study library.
 ## Features
 - Admin login using Django authentication
 - Register students with contact, chair preference, education, and membership details
-- Digital seat map with the original 1–51 numbering arrangement
-- Green seats are available; red seats are occupied
+- Digital seat map with the original 1–64 numbering arrangement
+- Green seats are available; red/orange seats are occupied (Normal/Executive)
 - Click an available seat to allocate it to a registered student
 - Chair type automatically sets the price: Normal ₹1,390; Executive ₹1,590
 - Record duration, payment mode, amount paid, and pending balance
@@ -101,16 +101,18 @@ docker compose down
 - `GET/POST /api/students/` — list/register students
 - `GET /api/seats/` — all seats and occupancy
 - `POST /api/seats/<seat_number>/allocate/` — allocate seat
+- `POST /api/seats/<seat_number>/upgrade/` — upgrade Normal chair to Executive chair (₹50/week for remaining weeks)
 - `POST /api/seats/<seat_number>/release/` — release seat
 - `GET /api/allocations/` — allocation history
 - `GET /api/dashboard/` — counts and revenue/payment summary
 
 ## Notes
-- Seat layout is represented by the original seat-number groups:
-  - left upper column: 1–5 (displayed top to bottom as 5,4,3,2,1)
-  - upper middle column: 6–11
-  - upper horizontal row: 12–20
-  - middle two-row block: 29–21 over 30–38
-  - lower horizontal row: 47–39
-  - left lower column: 51–48
+- Seat layout is represented by the 64-table architectural arrangement:
+  - top-left vertical column: 7–1 (top to bottom)
+  - top-middle vertical column: 8–16 (top to bottom, meeting table 19)
+  - upper horizontal row: 17–25 (left to right)
+  - middle vertical column: 34–36 (top to bottom)
+  - middle two-row block: 33–26 over 37–44
+  - lower horizontal row: 53–45 (left to right)
+  - bottom alcove: 64–60 (left), 59 (center bottom), 54–58 (right)
 - If you deploy this on a VPS that already hosts other applications, deploy it on a separate port/domain and inspect existing Nginx/Docker/services before changing anything. Do not overwrite existing configuration.

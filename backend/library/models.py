@@ -4,7 +4,9 @@ from datetime import timedelta
 
 class Student(models.Model):
     CHAIR_CHOICES = [("normal", "Normal"), ("executive", "Executive")]
+    GENDER_CHOICES = [("Male", "Male"), ("Female", "Female"), ("Other", "Other")]
     name = models.CharField(max_length=150)
+    gender = models.CharField(max_length=10, blank=True, choices=GENDER_CHOICES, default="Male")
     mobile = models.CharField(max_length=10, unique=True)
     alternate_mobile = models.CharField(max_length=10, blank=True)
     native_place = models.CharField(max_length=150, blank=True)
@@ -40,6 +42,9 @@ class Allocation(models.Model):
     amount_paid = models.PositiveIntegerField(default=0)
     payment_mode = models.CharField(max_length=20, choices=PAYMENT_CHOICES, default="UPI")
     is_active = models.BooleanField(default=True)
+    is_upgraded = models.BooleanField(default=False)
+    upgrade_fee = models.PositiveIntegerField(default=0)
+    upgraded_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -52,6 +57,28 @@ class Allocation(models.Model):
     def __str__(self):
         return f"Seat {self.seat_id} - {self.student.name}"
 
+class Transaction(models.Model):
+    TRANSACTION_TYPES = [
+        ("allocation", "Seat Allocation"),
+        ("upgrade", "Chair Upgrade"),
+    ]
+    PAYMENT_CHOICES = [("UPI", "UPI"), ("Cash", "Cash"), ("Bank Transfer", "Bank Transfer")]
+
+    allocation = models.ForeignKey(Allocation, on_delete=models.CASCADE, related_name="transactions", null=True, blank=True)
+    student = models.ForeignKey(Student, on_delete=models.PROTECT, related_name="transactions")
+    seat = models.ForeignKey(Seat, on_delete=models.PROTECT, related_name="transactions")
+    transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPES, default="allocation")
+    description = models.CharField(max_length=200, blank=True)
+    amount = models.PositiveIntegerField()
+    payment_mode = models.CharField(max_length=20, choices=PAYMENT_CHOICES, default="UPI")
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.transaction_type} - {self.student.name} - ₹{self.amount}"
+
 def seed_seats():
-    for number in range(1, 52):
+    for number in range(1, 65):
         Seat.objects.get_or_create(number=number)

@@ -30,3 +30,16 @@ export async function login(username, password) {
   await ensureCsrf() // Fetch the new CSRF token that Django rotated upon login
   return data
 }
+export async function signup(username, password, email = '') {
+  await ensureCsrf()
+  const r = await fetch(`${API}/auth/register/`, {
+    method: 'POST', credentials: 'include',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+    body: JSON.stringify({ username, password, email })
+  })
+  const data = await r.json()
+  if (!r.ok) throw new Error(data.detail || 'Sign up failed')
+  await ensureCsrf()
+  return data
+}
+
