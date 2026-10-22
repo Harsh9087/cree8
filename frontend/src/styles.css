@@ -747,23 +747,30 @@ tbody tr:last-child td {
 .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(16, 27, 43, 0.55);
+  background: rgba(16, 27, 43, 0.65);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 20px;
-  z-index: 20;
+  z-index: 2000;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .modal {
   width: min(100%, 570px);
   max-height: calc(100vh - 40px);
+  max-height: calc(100dvh - 40px);
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   background: white;
   border-radius: 17px;
   padding: 24px;
   box-shadow: 0 24px 80px rgba(7, 22, 42, 0.27);
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-head {
@@ -2198,8 +2205,53 @@ tbody tr:last-child td {
   .seat-row-8 .seat-tile {
     height: 42px;
   }
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    padding: 12px;
+    padding-top: max(14px, env(safe-area-inset-top));
+    padding-bottom: max(20px, env(safe-area-inset-bottom));
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
   .modal {
-    padding: 18px;
+    width: 100%;
+    max-width: 520px;
+    max-height: calc(100vh - 28px);
+    max-height: calc(100dvh - 28px);
+    margin: auto;
+    padding: 20px 16px 24px;
+    border-radius: 18px;
+    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    box-sizing: border-box;
+  }
+  .modal-form {
+    padding-bottom: 12px;
+  }
+  .modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 18px;
+    padding-top: 8px;
+    padding-bottom: 4px;
+  }
+  .modal-actions button {
+    flex: 1;
+    min-height: 44px;
+    padding: 12px 14px;
+    font-size: 13.5px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    border-radius: 9px;
   }
   .form-grid {
     grid-template-columns: 1fr;
