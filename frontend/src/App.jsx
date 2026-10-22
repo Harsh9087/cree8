@@ -1442,18 +1442,19 @@ function App() {
                 </div>
               </div>
 
-              <div className="upgrade-action-row">
-                <label className="mode-select-label">
-                  Payment mode:
+              <div className="upgrade-action-section">
+                <div className="upgrade-payment-mode-bar">
+                  <span className="mode-select-title">Payment mode:</span>
                   <select
+                    className="upgrade-mode-select"
                     value={upgradePaymentMode}
                     onChange={e => setUpgradePaymentMode(e.target.value)}
                   >
-                    <option>UPI</option>
-                    <option>Cash</option>
-                    <option>Bank Transfer</option>
+                    <option value="UPI">UPI</option>
+                    <option value="Cash">Cash</option>
+                    <option value="Bank Transfer">Bank Transfer</option>
                   </select>
-                </label>
+                </div>
 
                 <button
                   type="button"
@@ -1461,8 +1462,10 @@ function App() {
                   onClick={handleAutomaticUpgrade}
                   disabled={saving}
                 >
-                  <Sparkles size={16} />
-                  {saving ? 'Upgrading…' : `Confirm & Upgrade to Executive (₹${selectedSeat.allocation.upgrade_cost})`}
+                  <Sparkles size={17} />
+                  <span>
+                    {saving ? 'Upgrading…' : `Confirm & Upgrade to Executive (₹${selectedSeat.allocation.upgrade_cost})`}
+                  </span>
                 </button>
               </div>
             </div>

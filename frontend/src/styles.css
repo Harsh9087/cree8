@@ -1770,42 +1770,85 @@ tbody tr:last-child td {
   color: #9a3412;
 }
 
-.upgrade-action-row {
+.upgrade-action-section {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 12px;
+  width: 100%;
 }
 
-.mode-select-label {
+.upgrade-payment-mode-bar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
+  justify-content: space-between;
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+  padding: 9px 14px;
+  border-radius: 9px;
+  box-shadow: 0 1px 3px rgba(234, 88, 12, 0.04);
+}
+
+.mode-select-title {
+  font-size: 12.5px;
   font-weight: 700;
   color: #9a3412;
-  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.mode-select-label select {
-  padding: 8px 10px;
+.upgrade-mode-select {
+  padding: 7px 12px;
   border-radius: 8px;
-  border: 1px solid #fed7aa;
-  background: white;
-  font-size: 12px;
-  font-weight: 600;
-  color: #1e293b;
-  outline: 0;
+  border: 1.5px solid #fdba74;
+  background: #fff7ed;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #9a3412;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.15s ease;
 }
 
-.mode-select-label select:focus {
+.upgrade-mode-select:focus {
   border-color: #ea580c;
+  box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.15);
 }
 
 .upgrade-action-button.full-btn {
-  flex: 1;
+  width: 100%;
+  display: flex;
+  align-items: center;
   justify-content: center;
-  padding: 11px 18px;
-  font-size: 13px;
+  gap: 8px;
+  padding: 13px 20px;
+  font-size: 13.5px;
+  font-weight: 800;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
+  color: #ffffff;
+  border: none;
+  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.28);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.upgrade-action-button.full-btn:hover {
+  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+  box-shadow: 0 6px 16px rgba(234, 88, 12, 0.38);
+  transform: translateY(-1px);
+}
+
+.upgrade-action-button.full-btn:active {
+  transform: translateY(0);
+}
+
+.upgrade-action-button.full-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
 }
 
 /* Responsive Media Queries */
