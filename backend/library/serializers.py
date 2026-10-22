@@ -84,7 +84,8 @@ class AllocationSerializer(serializers.ModelSerializer):
         return "active"
 
     def get_is_seat_available(self, obj):
-        return not Allocation.objects.filter(seat_id=obj.seat_id, is_active=True).exclude(pk=obj.pk).exists()
+        # A seat is available if no active allocation is currently occupying it
+        return not Allocation.objects.filter(seat_id=obj.seat_id, is_active=True).exists()
 
 class SeatSerializer(serializers.ModelSerializer):
     status = serializers.SerializerMethodField()

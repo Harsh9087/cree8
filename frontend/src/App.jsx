@@ -2280,13 +2280,14 @@ function SubscriptionTable({ subscriptions, onVerify, onQuickVerifyLeft, onRenew
               const isEnded = days < 0
               const isToday = days === 0
               const isSoon = days > 0 && days <= 7
+              const isCompleted = days <= 0
               const isPending = s.verification_status === 'pending'
               const isConfirmedLeft = s.verification_status === 'confirmed_left'
               const isRenewed = s.verification_status === 'renewed'
               const isRetained = s.verification_status === 'retained'
 
               return (
-                <tr key={s.id} className={isEnded && isPending ? 'row-highlight-pending' : ''}>
+                <tr key={s.id} className={isCompleted && isPending ? 'row-highlight-pending' : ''}>
                   <td>
                     <div className="student-name">
                       <span className="student-avatar">{s.student_name.slice(0, 1).toUpperCase()}</span>
@@ -2304,9 +2305,19 @@ function SubscriptionTable({ subscriptions, onVerify, onQuickVerifyLeft, onRenew
                         {s.chair_type} chair
                       </span>
                     </div>
-                    <small style={{display: 'block', marginTop: '4px', fontSize: '11px', color: s.is_seat_available ? '#16a34a' : '#64748b'}}>
-                      {s.is_seat_available ? '● Seat is Available' : '○ Seat Reallocated'}
-                    </small>
+                    {s.is_active ? (
+                      <small style={{display: 'block', marginTop: '4px', fontSize: '11px', color: '#ea580c', fontWeight: 600}}>
+                        ● Currently Occupied
+                      </small>
+                    ) : s.is_seat_available ? (
+                      <small style={{display: 'block', marginTop: '4px', fontSize: '11px', color: '#16a34a', fontWeight: 600}}>
+                        ● Seat is Free & Available
+                      </small>
+                    ) : (
+                      <small style={{display: 'block', marginTop: '4px', fontSize: '11px', color: '#64748b'}}>
+                        ○ Seat Reallocated (Occupied)
+                      </small>
+                    )}
                   </td>
                   <td>
                     <b>{s.duration_months === 0 ? '1 day trial' : `${s.duration_months} mo`}</b>
@@ -2350,30 +2361,38 @@ function SubscriptionTable({ subscriptions, onVerify, onQuickVerifyLeft, onRenew
                     )}
                   </td>
                   <td>
-                    {isPending && (
-                      <span className="verify-pill pending">
-                        <HelpCircle size={12}/> Unverified
+                    {!isCompleted ? (
+                      <span className="verify-pill ongoing">
+                        <CheckCircle2 size={12}/> Active / Ongoing
                       </span>
-                    )}
-                    {isConfirmedLeft && (
-                      <span className="verify-pill confirmed">
-                        <UserX size={12}/> Confirmed Left
-                      </span>
-                    )}
-                    {isRenewed && (
-                      <span className="verify-pill renewed">
-                        <Repeat size={12}/> Renewed
-                      </span>
-                    )}
-                    {isRetained && (
-                      <span className="verify-pill retained">
-                        <Clock size={12}/> Grace Period
-                      </span>
-                    )}
-                    {s.verified_at && (
-                      <small className="muted" style={{display: 'block', marginTop: '3px', fontSize: '10.5px'}}>
-                        {new Date(s.verified_at).toLocaleDateString([], {day: '2-digit', month: 'short'})}
-                      </small>
+                    ) : (
+                      <>
+                        {isPending && (
+                          <span className="verify-pill pending">
+                            <HelpCircle size={12}/> Needs Verification
+                          </span>
+                        )}
+                        {isConfirmedLeft && (
+                          <span className="verify-pill confirmed">
+                            <UserX size={12}/> Confirmed Left
+                          </span>
+                        )}
+                        {isRenewed && (
+                          <span className="verify-pill renewed">
+                            <Repeat size={12}/> Renewed
+                          </span>
+                        )}
+                        {isRetained && (
+                          <span className="verify-pill retained">
+                            <Clock size={12}/> Grace Period
+                          </span>
+                        )}
+                        {s.verified_at && (
+                          <small className="muted" style={{display: 'block', marginTop: '3px', fontSize: '10.5px'}}>
+                            {new Date(s.verified_at).toLocaleDateString([], {day: '2-digit', month: 'short'})}
+                          </small>
+                        )}
+                      </>
                     )}
                   </td>
                   <td>
@@ -2387,26 +2406,30 @@ function SubscriptionTable({ subscriptions, onVerify, onQuickVerifyLeft, onRenew
                   </td>
                   <td>
                     <div className="sub-actions-stack">
-                      <button
-                        className="btn-verify-action"
-                        onClick={() => onVerify(s)}
-                        title="Verify whether student has ended or is continuing"
-                      >
-                        <UserCheck size={13}/> Verify
-                      </button>
-                      {isPending && isEnded && (
-                        <button
-                          className="btn-quick-left"
-                          onClick={() => onQuickVerifyLeft(s)}
-                          title="Quick 1-click confirmation that student has left library"
-                        >
-                          <UserX size={13}/> Left
-                        </button>
+                      {isCompleted && (
+                        <>
+                          <button
+                            className="btn-verify-action"
+                            onClick={() => onVerify(s)}
+                            title="Verify whether student has ended or is continuing"
+                          >
+                            <UserCheck size={13}/> {isPending ? 'Verify' : 'Edit Status'}
+                          </button>
+                          {isPending && (
+                            <button
+                              className="btn-quick-left"
+                              onClick={() => onQuickVerifyLeft(s)}
+                              title="Quick 1-click confirmation that student has left library"
+                            >
+                              <UserX size={13}/> Left
+                            </button>
+                          )}
+                        </>
                       )}
                       <button
                         className="btn-renew-action"
                         onClick={() => onRenew(s)}
-                        title="Renew subscription"
+                        title={isCompleted ? "Renew subscription" : "Extend / Renew subscription in advance"}
                       >
                         <Repeat size={13}/> Renew
                       </button>
