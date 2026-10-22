@@ -325,6 +325,7 @@ function App() {
   const [showRegister,setShowRegister] = useState(false)
   const [studentForm,setStudentForm] = useState({id:'',name:'',gender:'Male',mobile:'',alternate_mobile:'',native_place:'',currently_studying:''})
   const [allocationForm,setAllocationForm] = useState({student:'',chair_type:'normal',duration_months:1,payment_mode:'UPI',amount_paid:'1390',start_date:new Date().toISOString().slice(0,10)})
+  const [studentSearchQuery, setStudentSearchQuery] = useState('')
   const [upgradePaymentMode,setUpgradePaymentMode] = useState('UPI')
   const [saving,setSaving] = useState(false)
   const [subscriptionsData, setSubscriptionsData] = useState({ stats: {}, allocations: [] })
@@ -417,18 +418,33 @@ function App() {
     const seat=seats.find(s=>s.number===number)
     setSelectedSeat({number,...(seat||{})})
     setUpgradePaymentMode('UPI')
+    setStudentSearchQuery('')
     setAllocationForm({student:'',chair_type:'normal',duration_months:1,payment_mode:'UPI',amount_paid:'1390',start_date:new Date().toISOString().slice(0,10)})
   }
   async function allocate(e) {
     e.preventDefault(); if(!selectedSeat)return
+    if (!allocationForm.student) {
+      setError('Please choose a student to allocate this seat.')
+      return
+    }
     setSaving(true); setError(''); setNotice('')
-    try { await api(`/seats/${selectedSeat.number}/allocate/`,{method:'POST',body:JSON.stringify({...allocationForm,student:Number(allocationForm.student),duration_months:Number(allocationForm.duration_months),amount_paid:Number(allocationForm.amount_paid)})}); setSelectedSeat(null); setNotice(`Seat ${selectedSeat.number} allocated successfully.`); await loadAll() }
+    try { await api(`/seats/${selectedSeat.number}/allocate/`,{method:'POST',body:JSON.stringify({...allocationForm,student:Number(allocationForm.student),duration_months:Number(allocationForm.duration_months),amount_paid:Number(allocationForm.amount_paid)})}); setSelectedSeat(null); setStudentSearchQuery(''); setNotice(`Seat ${selectedSeat.number} allocated successfully.`); await loadAll() }
     catch(e){setError(e.message)} finally{setSaving(false)}
   }
   async function releaseSeat(number) {
     if(!window.confirm(`Release seat ${number}? The active allocation will be closed.`))return
     try { await api(`/seats/${number}/release/`,{method:'POST',body:'{}'}); setSelectedSeat(null); setNotice(`Seat ${number} is now available.`); await loadAll() } catch(e){setError(e.message)}
   }
+  const filteredAllocationStudents = useMemo(() => {
+    if (!studentSearchQuery.trim()) return students
+    const q = studentSearchQuery.trim().toLowerCase()
+    return students.filter(s => {
+      const nameMatch = (s.name || '').toLowerCase().includes(q)
+      const mobileMatch = (s.mobile || '').includes(q)
+      const altMobileMatch = (s.alternate_mobile || '').includes(q)
+      return nameMatch || mobileMatch || altMobileMatch
+    })
+  }, [students, studentSearchQuery])
   const pendingAllocations = useMemo(() => {
     return allocations.filter(a => Number(a.amount_pending) > 0)
   }, [allocations])
@@ -1367,7 +1383,7 @@ function App() {
         </div>
       </form>
     </Modal>}
-    {selectedSeat&&<Modal title={`Seat ${selectedSeat.number}`} onClose={()=>setSelectedSeat(null)}>
+    {selectedSeat&&<Modal title={`Seat ${selectedSeat.number}`} onClose={()=>{setSelectedSeat(null); setStudentSearchQuery('');}}>
       {selectedSeat.status==='occupied' ? (
         <div className="occupied-detail">
           <div className="occupied-banner">
@@ -1486,7 +1502,129 @@ function App() {
       ) : (
         <form className="form-stack modal-form" onSubmit={allocate}>
           <div className="seat-available-banner"><CheckCircle2 size={18}/> This seat is available for allocation.</div>
-          <label>Select registered student *<select value={allocationForm.student} onChange={e=>updateAllocation('student',e.target.value)} required><option value="">Choose student…</option>{students.map(s=><option key={s.id} value={s.id}>{s.name} ({s.gender || 'Male'}) · {s.mobile}</option>)}</select></label>
+          {(() => {
+            const selectedStudentObj = students.find(s => String(s.id) === String(allocationForm.student))
+            return selectedStudentObj ? (
+              <div className="student-selection-container">
+                <label className="student-select-label">Selected registered student *</label>
+                <div className="selected-student-card">
+                  <div className="selected-student-avatar">
+                    <Users size={18} />
+                  </div>
+                  <div className="selected-student-info">
+                    <div className="selected-student-title">
+                      <b>{selectedStudentObj.name}</b>
+                      <span className="student-gender-pill">{selectedStudentObj.gender || 'Male'}</span>
+                    </div>
+                    <div className="selected-student-meta">
+                      <span>📞 {selectedStudentObj.mobile}</span>
+                      {selectedStudentObj.currently_studying && <span>· 📚 {selectedStudentObj.currently_studying}</span>}
+                      {selectedStudentObj.native_place && <span>· 📍 {selectedStudentObj.native_place}</span>}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-change-student"
+                    onClick={() => {
+                      updateAllocation('student', '')
+                      setStudentSearchQuery('')
+                    }}
+                    title="Change student"
+                  >
+                    Change
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="student-selection-container">
+                <label className="student-select-label">Select registered student *</label>
+                <div className="student-search-input-box">
+                  <Search size={16} className="student-search-icon" />
+                  <input
+                    type="text"
+                    className="student-search-input"
+                    placeholder="Search by student name or contact no..."
+                    value={studentSearchQuery}
+                    onChange={e => setStudentSearchQuery(e.target.value)}
+                  />
+                  {studentSearchQuery && (
+                    <button
+                      type="button"
+                      className="student-search-clear"
+                      onClick={() => setStudentSearchQuery('')}
+                      title="Clear search"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
+                </div>
+
+                {studentSearchQuery.trim() && (
+                  <div className="student-search-results-list">
+                    {filteredAllocationStudents.length === 0 ? (
+                      <div className="student-search-empty">
+                        No students found matching &ldquo;<b>{studentSearchQuery}</b>&rdquo;
+                      </div>
+                    ) : (
+                      <>
+                        <div className="student-search-count-header">
+                          Found {filteredAllocationStudents.length} matching {filteredAllocationStudents.length === 1 ? 'student' : 'students'} (tap to select):
+                        </div>
+                        {filteredAllocationStudents.slice(0, 6).map(s => (
+                          <div
+                            key={s.id}
+                            className="student-search-result-item"
+                            onClick={() => {
+                              updateAllocation('student', s.id)
+                              setStudentSearchQuery('')
+                            }}
+                          >
+                            <div className="result-item-main">
+                              <span className="result-item-name">{s.name}</span>
+                              <span className="student-gender-pill">{s.gender || 'Male'}</span>
+                            </div>
+                            <div className="result-item-sub">
+                              <span>📞 {s.mobile}</span>
+                              {s.currently_studying && <span>· {s.currently_studying}</span>}
+                              {s.native_place && <span>· {s.native_place}</span>}
+                            </div>
+                          </div>
+                        ))}
+                        {filteredAllocationStudents.length > 6 && (
+                          <div className="student-search-overflow-note">
+                            + {filteredAllocationStudents.length - 6} more matching students available in dropdown below
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <select
+                  className="student-dropdown-select"
+                  value={allocationForm.student}
+                  onChange={e => {
+                    updateAllocation('student', e.target.value)
+                    if (e.target.value) setStudentSearchQuery('')
+                  }}
+                  required
+                >
+                  <option value="">
+                    {filteredAllocationStudents.length === 0
+                      ? 'No matching student found'
+                      : studentSearchQuery
+                      ? `Choose from ${filteredAllocationStudents.length} matching students…`
+                      : `Choose student (${students.length} registered)…`}
+                  </option>
+                  {filteredAllocationStudents.map(s => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.gender || 'Male'}) · {s.mobile}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )
+          })()}
           {students.length===0&&<p className="helper">Register a student first, then return to allocate a seat.</p>}
           <label>Date of joining<input type="date" value={allocationForm.start_date} onChange={e=>updateAllocation('start_date',e.target.value)} required/></label>
           <fieldset><legend>Chair type *</legend><label className="choice-card"><input type="radio" checked={allocationForm.chair_type==='normal'} onChange={()=>updateAllocation('chair_type','normal')}/><span><b>Normal chair</b><small>₹1,390/mo</small></span></label><label className="choice-card"><input type="radio" checked={allocationForm.chair_type==='executive'} onChange={()=>updateAllocation('chair_type','executive')}/><span><b>Executive chair</b><small>₹1,590/mo</small></span></label></fieldset>
@@ -1494,7 +1632,7 @@ function App() {
           <label>Mode of payment<select value={allocationForm.payment_mode} onChange={e=>updateAllocation('payment_mode',e.target.value)}><option>UPI</option><option>Cash</option><option>Bank Transfer</option></select></label>
           <label>Amount paid (₹)<input type="number" min="0" max={priceFor(allocationForm.chair_type, allocationForm.duration_months)} value={allocationForm.amount_paid} onChange={e=>updateAllocation('amount_paid',e.target.value)} required/></label>
           <div className="price-summary"><span>Total amount</span><b>₹{priceFor(allocationForm.chair_type, allocationForm.duration_months).toLocaleString('en-IN')}</b><small>Pending after payment: ₹{Math.max(priceFor(allocationForm.chair_type, allocationForm.duration_months)-Number(allocationForm.amount_paid||0),0).toLocaleString('en-IN')}</small></div>
-          <div className="modal-actions"><button type="button" className="secondary" onClick={()=>setSelectedSeat(null)}>Cancel</button><button className="primary" disabled={saving||students.length===0}>{saving?'Allocating…':'Confirm allocation'}</button></div>
+          <div className="modal-actions"><button type="button" className="secondary" onClick={()=>{setSelectedSeat(null); setStudentSearchQuery('');}}>Cancel</button><button className="primary" disabled={saving||students.length===0||!allocationForm.student}>{saving?'Allocating…':'Confirm allocation'}</button></div>
         </form>
       )}
     </Modal>}

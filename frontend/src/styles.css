@@ -897,6 +897,251 @@ tbody tr:last-child td {
   font-size: 12px;
 }
 
+/* Student Search & Selection in Seat Allocation Modal */
+.student-selection-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+
+.student-select-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #35445a;
+  display: block;
+}
+
+.student-search-input-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1.5px solid #dce3ed;
+  border-radius: 9px;
+  background: #f8fafc;
+  padding: 0 11px;
+  transition: all 0.2s ease;
+}
+
+.student-search-input-box:focus-within {
+  border-color: #0e9a7d;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(14, 154, 125, 0.1);
+}
+
+.student-search-icon {
+  color: #0e9a7d;
+  flex-shrink: 0;
+}
+
+.student-search-input {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 9px 0 !important;
+  font-size: 13px !important;
+  color: #1e293b !important;
+  width: 100% !important;
+}
+
+.student-search-input::placeholder {
+  color: #94a3b8;
+}
+
+.student-search-clear {
+  border: none;
+  background: #e2e8f0;
+  color: #64748b;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+  transition: all 0.15s ease;
+}
+
+.student-search-clear:hover {
+  background: #cbd5e1;
+  color: #0f172a;
+}
+
+.student-search-results-list {
+  max-height: 190px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: #ffffff;
+  border: 1.5px solid #0e9a7d;
+  border-radius: 10px;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 8px 24px rgba(14, 154, 125, 0.12);
+}
+
+.student-search-count-header {
+  font-size: 11px;
+  font-weight: 700;
+  color: #087f68;
+  padding: 3px 6px;
+}
+
+.student-search-result-item {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #f8fafc;
+  border: 1px solid #edf2f7;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.student-search-result-item:hover,
+.student-search-result-item:active {
+  background: #e6f6f2;
+  border-color: #9fe2d3;
+  transform: translateX(2px);
+}
+
+.result-item-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.result-item-name {
+  font-weight: 700;
+  font-size: 13px;
+  color: #0f172a;
+}
+
+.result-item-sub {
+  font-size: 11.5px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.student-gender-pill {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 12px;
+  background: #e0f2fe;
+  color: #0284c7;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.student-search-empty {
+  padding: 12px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 12px;
+  font-style: italic;
+}
+
+.student-search-overflow-note {
+  font-size: 10.5px;
+  color: #64748b;
+  text-align: center;
+  padding: 4px;
+  font-style: italic;
+}
+
+.student-dropdown-select {
+  width: 100%;
+  border: 1px solid #dce3ed;
+  border-radius: 8px;
+  background: white;
+  padding: 10px 12px;
+  outline: 0;
+  color: #1c2b40;
+  font-size: 12px;
+}
+
+.selected-student-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 13px;
+  background: linear-gradient(135deg, #f0fdf9 0%, #ecfdf5 100%);
+  border: 1.5px solid #a7f3d0;
+  border-radius: 11px;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.08);
+}
+
+.selected-student-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: #0e9a7d;
+  color: white;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.selected-student-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.selected-student-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.selected-student-title b {
+  font-size: 13.5px;
+  color: #064e3b;
+  font-weight: 800;
+}
+
+.selected-student-meta {
+  font-size: 11.5px;
+  color: #047857;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-weight: 500;
+}
+
+.btn-change-student {
+  padding: 6px 12px;
+  border-radius: 7px;
+  border: 1px solid #6ee7b7;
+  background: white;
+  color: #047857;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+
+.btn-change-student:hover {
+  background: #0e9a7d;
+  color: white;
+  border-color: #0e9a7d;
+}
+
 .price-summary {
   display: grid;
   grid-template-columns: 1fr auto;
