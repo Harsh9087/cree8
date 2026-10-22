@@ -1374,7 +1374,7 @@ function App() {
             <span className="dot red"></span>
             <b>Currently occupied</b>
             {selectedSeat.allocation?.is_upgraded && (
-              <span className="upgrade-badge">⭐ Upgraded to Executive</span>
+              <span className="upgrade-badge">Upgraded to Executive</span>
             )}
           </div>
           <h3>{selectedSeat.allocation?.student_name}</h3>
@@ -1440,7 +1440,7 @@ function App() {
                   </span>
                   <span className="calc-arrow">=</span>
                   <span className="calc-pill highlight">
-                    ⭐ <b>₹{selectedSeat.allocation.upgrade_cost}</b>
+                    <b>₹{selectedSeat.allocation.upgrade_cost}</b>
                   </span>
                 </div>
 
@@ -2128,9 +2128,9 @@ function TransactionTable({transactions}){
                   </td>
                   <td>
                     {isUpgrade ? (
-                      <span className="upgrade-pill">⭐ Upgrade</span>
+                      <span className="upgrade-pill">Upgrade</span>
                     ) : (
-                      <span className="allocation-pill">🪑 Allocation</span>
+                      <span className="allocation-pill">Allocation</span>
                     )}
                   </td>
                   <td>
@@ -2220,7 +2220,7 @@ function PendingTable({ allocations, onCollect }) {
                         {a.chair_type} chair
                       </span>
                       {a.is_upgraded && (
-                        <span className="upgrade-pill" style={{marginLeft: '4px'}}>⭐ Upgraded</span>
+                        <span className="upgrade-pill" style={{marginLeft: '4px'}}>Upgraded</span>
                       )}
                     </div>
                   </td>
